@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 #
+#
 # nunchux - Smart tmux app launcher
 #
 # Features:
@@ -18,7 +19,7 @@ trap 'echo "Error on line $LINENO: $BASH_COMMAND"; echo "Press any key to close.
 # Determine script directory and add to PATH (only if not already there)
 NUNCHUX_BIN_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 if [[ ":$PATH:" != *":$NUNCHUX_BIN_DIR:"* ]]; then
-    export PATH="$NUNCHUX_BIN_DIR:$PATH"
+	export PATH="$NUNCHUX_BIN_DIR:$PATH"
 fi
 tmux set-environment -g NUNCHUX_BIN "$NUNCHUX_BIN_DIR"
 
@@ -41,6 +42,9 @@ APP_POPUP_HEIGHT="90%"
 # Justfile integration (set to false to disable)
 JUST_ENABLED=true
 
+# Taskfile integration (set to false to disable)
+TASK_ENABLED=true
+
 # package.json scripts integration (set to false to disable)
 NPM_ENABLED=true
 
@@ -62,7 +66,7 @@ EXCLUDE_PATTERNS=".git, node_modules, Cache, cache, .cache, GPUCache, CachedData
 readonly APP_SEP=":::"
 
 # Nunchucks ASCII art (used in easter egg and error displays)
-read -r -d '' NUNCHUCKS_ART << 'EOF' || true
+read -r -d '' NUNCHUCKS_ART <<'EOF' || true
 .-o-o-o-o-o-o-o-.
 /                 \\
 [O]                 [O]
@@ -77,53 +81,53 @@ EOF
 
 # Platform detection for GNU vs BSD tools
 if [[ "$OSTYPE" == "darwin"* ]]; then
-    IS_MACOS=true
+	IS_MACOS=true
 else
-    IS_MACOS=false
+	IS_MACOS=false
 fi
 
 # Get file modification time as epoch seconds (cross-platform)
 get_mtime() {
-    if $IS_MACOS; then
-        stat -f %m "$1" 2>/dev/null || echo 0
-    else
-        stat -c %Y "$1" 2>/dev/null || echo 0
-    fi
+	if $IS_MACOS; then
+		stat -f %m "$1" 2>/dev/null || echo 0
+	else
+		stat -c %Y "$1" 2>/dev/null || echo 0
+	fi
 }
 
 # Find files with mtime - outputs: mtime\tpath (cross-platform)
 # Usage: find_with_mtime "${find_args[@]}"
 find_with_mtime() {
-    if $IS_MACOS; then
-        # BSD find doesn't have -printf, use stat instead
-        find "$@" -exec stat -f '%m' {} \; -print 2>/dev/null | paste - -
-    else
-        find "$@" -printf '%T@\t%p\n' 2>/dev/null
-    fi
+	if $IS_MACOS; then
+		# BSD find doesn't have -printf, use stat instead
+		find "$@" -exec stat -f '%m' {} \; -print 2>/dev/null | paste - -
+	else
+		find "$@" -printf '%T@\t%p\n' 2>/dev/null
+	fi
 }
 
 # Easter egg: Chuck Norris programming facts
 CHUCK_FACTS=(
-    "Chuck Norris can unit test entire applications with a single assert."
-    "Chuck Norris doesn't use web frameworks. The internet obeys him."
-    "Chuck Norris can delete the root folder and still boot."
-    "Chuck Norris's code doesn't follow conventions. Conventions follow his code."
-    "Chuck Norris can instantiate an abstract class."
-    "Chuck Norris doesn't need sudo. The system always trusts him."
-    "Chuck Norris can divide by zero."
-    "When Chuck Norris throws an exception, nothing can catch it."
-    "Chuck Norris's keyboard doesn't have a Ctrl key. He's always in control."
-    "Chuck Norris can compile syntax errors."
-    "Chuck Norris doesn't need garbage collection. Memory is too afraid to leak."
-    "Chuck Norris can read from /dev/null."
-    "Chuck Norris finished World of Warcraft."
-    "Chuck Norris can write infinite loops that finish in under 2 seconds."
-    "Chuck Norris's code is self-documenting. In binary."
-    "Chuck Norris doesn't pair program. The code pairs with him."
-    "When Chuck Norris git pushes, the remote pulls."
-    "Chuck Norris can access private methods. Publicly."
-    "Chuck Norris doesn't get compiler errors. The compiler gets Chuck Norris errors."
-    "Chuck Norris can make a class that is both abstract and final."
+	"Chuck Norris can unit test entire applications with a single assert."
+	"Chuck Norris doesn't use web frameworks. The internet obeys him."
+	"Chuck Norris can delete the root folder and still boot."
+	"Chuck Norris's code doesn't follow conventions. Conventions follow his code."
+	"Chuck Norris can instantiate an abstract class."
+	"Chuck Norris doesn't need sudo. The system always trusts him."
+	"Chuck Norris can divide by zero."
+	"When Chuck Norris throws an exception, nothing can catch it."
+	"Chuck Norris's keyboard doesn't have a Ctrl key. He's always in control."
+	"Chuck Norris can compile syntax errors."
+	"Chuck Norris doesn't need garbage collection. Memory is too afraid to leak."
+	"Chuck Norris can read from /dev/null."
+	"Chuck Norris finished World of Warcraft."
+	"Chuck Norris can write infinite loops that finish in under 2 seconds."
+	"Chuck Norris's code is self-documenting. In binary."
+	"Chuck Norris doesn't pair program. The code pairs with him."
+	"When Chuck Norris git pushes, the remote pulls."
+	"Chuck Norris can access private methods. Publicly."
+	"Chuck Norris doesn't get compiler errors. The compiler gets Chuck Norris errors."
+	"Chuck Norris can make a class that is both abstract and final."
 )
 
 # App storage
@@ -151,243 +155,303 @@ CURRENT_DIRBROWSE=""
 
 # Parse INI config file
 parse_config() {
-    local config_file="$1"
-    local current_section=""
-    local line key value
-    local continued_value="" continued_key=""
-    local app_cmd="" app_desc="" app_width="" app_height="" app_status="" app_status_script="" app_on_exit=""
-    local app_directory="" app_depth="" app_glob="" app_sort="" app_sort_direction="" app_cache_ttl=""
+	local config_file="$1"
+	local current_section=""
+	local line key value
+	local continued_value="" continued_key=""
+	local app_cmd="" app_desc="" app_width="" app_height="" app_status="" app_status_script="" app_on_exit=""
+	local app_directory="" app_depth="" app_glob="" app_sort="" app_sort_direction="" app_cache_ttl=""
 
-    save_app() {
-        if [[ -n "$current_section" && "$current_section" != "settings" ]]; then
-            # Check if this is a directory browser entry
-            if [[ -n "$app_directory" && "$current_section" != */* ]]; then
-                DIRBROWSE_DIR["$current_section"]="${app_directory/#\~/$HOME}"
-                DIRBROWSE_DEPTH["$current_section"]="${app_depth:-1}"
-                DIRBROWSE_WIDTH["$current_section"]="${app_width:-90}"
-                DIRBROWSE_HEIGHT["$current_section"]="${app_height:-80}"
-                DIRBROWSE_GLOB["$current_section"]="${app_glob:-}"
-                DIRBROWSE_SORT["$current_section"]="${app_sort:-modified}"
-                DIRBROWSE_SORT_DIR["$current_section"]="${app_sort_direction:-descending}"
-                DIRBROWSE_CACHE_TTL["$current_section"]="${app_cache_ttl:-300}"
-                return
-            fi
-            # Check if this is submenu metadata (no cmd, no /)
-            if [[ -z "$app_cmd" && "$current_section" != */* ]]; then
-                # This is submenu metadata
-                if [[ -n "$app_status_script" ]]; then
-                    SUBMENU_STATUS["$current_section"]="source ${app_status_script/#\~/$HOME}"
-                elif [[ -n "$app_status" ]]; then
-                    SUBMENU_STATUS["$current_section"]="$app_status"
-                fi
-                if [[ -n "$app_desc" ]]; then
-                    SUBMENU_DESC["$current_section"]="$app_desc"
-                fi
-                if [[ -n "$app_cache_ttl" ]]; then
-                    SUBMENU_CACHE_TTL["$current_section"]="$app_cache_ttl"
-                fi
-                return
-            fi
-            # Regular app entry
-            [[ -z "$app_cmd" ]] && return
-            CHUCKS+=("${current_section}${APP_SEP}${app_cmd}${APP_SEP}${app_desc}${APP_SEP}${app_width}${APP_SEP}${app_height}${APP_SEP}${app_on_exit}")
-            # Track submenu if section contains /
-            if [[ "$current_section" == */* ]]; then
-                local submenu_name="${current_section%%/*}"
-                SUBMENUS["$submenu_name"]=1
-            fi
-            if [[ -n "$app_status_script" ]]; then
-                CHUCK_STATUS["$current_section"]="source ${app_status_script/#\~/$HOME}"
-            elif [[ -n "$app_status" ]]; then
-                CHUCK_STATUS["$current_section"]="$app_status"
-            fi
-        fi
-    }
+	save_app() {
+		if [[ -n "$current_section" && "$current_section" != "settings" ]]; then
+			# Check if this is a directory browser entry
+			if [[ -n "$app_directory" && "$current_section" != */* ]]; then
+				DIRBROWSE_DIR["$current_section"]="${app_directory/#\~/$HOME}"
+				DIRBROWSE_DEPTH["$current_section"]="${app_depth:-1}"
+				DIRBROWSE_WIDTH["$current_section"]="${app_width:-90}"
+				DIRBROWSE_HEIGHT["$current_section"]="${app_height:-80}"
+				DIRBROWSE_GLOB["$current_section"]="${app_glob:-}"
+				DIRBROWSE_SORT["$current_section"]="${app_sort:-modified}"
+				DIRBROWSE_SORT_DIR["$current_section"]="${app_sort_direction:-descending}"
+				DIRBROWSE_CACHE_TTL["$current_section"]="${app_cache_ttl:-300}"
+				return
+			fi
+			# Check if this is submenu metadata (no cmd, no /)
+			if [[ -z "$app_cmd" && "$current_section" != */* ]]; then
+				# This is submenu metadata
+				if [[ -n "$app_status_script" ]]; then
+					SUBMENU_STATUS["$current_section"]="source ${app_status_script/#\~/$HOME}"
+				elif [[ -n "$app_status" ]]; then
+					SUBMENU_STATUS["$current_section"]="$app_status"
+				fi
+				if [[ -n "$app_desc" ]]; then
+					SUBMENU_DESC["$current_section"]="$app_desc"
+				fi
+				if [[ -n "$app_cache_ttl" ]]; then
+					SUBMENU_CACHE_TTL["$current_section"]="$app_cache_ttl"
+				fi
+				return
+			fi
+			# Regular app entry
+			[[ -z "$app_cmd" ]] && return
+			CHUCKS+=("${current_section}${APP_SEP}${app_cmd}${APP_SEP}${app_desc}${APP_SEP}${app_width}${APP_SEP}${app_height}${APP_SEP}${app_on_exit}")
+			# Track submenu if section contains /
+			if [[ "$current_section" == */* ]]; then
+				local submenu_name="${current_section%%/*}"
+				SUBMENUS["$submenu_name"]=1
+			fi
+			if [[ -n "$app_status_script" ]]; then
+				CHUCK_STATUS["$current_section"]="source ${app_status_script/#\~/$HOME}"
+			elif [[ -n "$app_status" ]]; then
+				CHUCK_STATUS["$current_section"]="$app_status"
+			fi
+		fi
+	}
 
-    while IFS= read -r line || [[ -n "$line" ]]; do
-        # Handle line continuation
-        if [[ -n "$continued_key" ]]; then
-            line="${line#"${line%%[![:space:]]*}"}"
-            if [[ "$line" == *\\ ]]; then
-                continued_value+="${line%\\}"
-                continue
-            else
-                continued_value+="$line"
-                line="$continued_key = $continued_value"
-                continued_key=""
-                continued_value=""
-            fi
-        fi
+	while IFS= read -r line || [[ -n "$line" ]]; do
+		# Handle line continuation
+		if [[ -n "$continued_key" ]]; then
+			line="${line#"${line%%[![:space:]]*}"}"
+			if [[ "$line" == *\\ ]]; then
+				continued_value+="${line%\\}"
+				continue
+			else
+				continued_value+="$line"
+				line="$continued_key = $continued_value"
+				continued_key=""
+				continued_value=""
+			fi
+		fi
 
-        # Skip comments and empty lines
-        [[ "$line" =~ ^[[:space:]]*# ]] && continue
-        [[ "$line" =~ ^[[:space:]]*$ ]] && continue
+		# Skip comments and empty lines
+		[[ "$line" =~ ^[[:space:]]*# ]] && continue
+		[[ "$line" =~ ^[[:space:]]*$ ]] && continue
 
-        # Section header
-        if [[ "$line" =~ ^\[([^\]]+)\] ]]; then
-            save_app
-            current_section="${BASH_REMATCH[1]}"
-            app_cmd="" app_desc="" app_width="" app_height="" app_status="" app_status_script="" app_on_exit=""
-            app_directory="" app_depth="" app_glob="" app_sort="" app_sort_direction="" app_cache_ttl=""
-            continue
-        fi
+		# Section header
+		if [[ "$line" =~ ^\[([^\]]+)\] ]]; then
+			save_app
+			current_section="${BASH_REMATCH[1]}"
+			app_cmd="" app_desc="" app_width="" app_height="" app_status="" app_status_script="" app_on_exit=""
+			app_directory="" app_depth="" app_glob="" app_sort="" app_sort_direction="" app_cache_ttl=""
+			continue
+		fi
 
-        # Key = value (split on first =)
-        if [[ "$line" =~ ^[[:space:]]*([^=]+)=(.*)$ ]]; then
-            key="${BASH_REMATCH[1]}"
-            value="${BASH_REMATCH[2]}"
-            key="${key%"${key##*[![:space:]]}"}"
-            key="${key#"${key%%[![:space:]]*}"}"
-            value="${value#"${value%%[![:space:]]*}"}"
+		# Key = value (split on first =)
+		if [[ "$line" =~ ^[[:space:]]*([^=]+)=(.*)$ ]]; then
+			key="${BASH_REMATCH[1]}"
+			value="${BASH_REMATCH[2]}"
+			key="${key%"${key##*[![:space:]]}"}"
+			key="${key#"${key%%[![:space:]]*}"}"
+			value="${value#"${value%%[![:space:]]*}"}"
 
-            # Line continuation
-            if [[ "$value" == *\\ ]]; then
-                continued_key="$key"
-                continued_value="${value%\\}"
-                continue
-            fi
+			# Line continuation
+			if [[ "$value" == *\\ ]]; then
+				continued_key="$key"
+				continued_value="${value%\\}"
+				continue
+			fi
 
-            if [[ "$current_section" == "settings" ]]; then
-                case "$key" in
-                    icon_running) ICON_RUNNING="$value" ;;
-                    icon_stopped) ICON_STOPPED="$value" ;;
-                    menu_width) MENU_WIDTH="$value" ;;
-                    menu_height) MENU_HEIGHT="$value" ;;
-                    popup_width) APP_POPUP_WIDTH="$value" ;;
-                    popup_height) APP_POPUP_HEIGHT="$value" ;;
-                    just_enabled) JUST_ENABLED="$value" ;;
-                    npm_enabled) NPM_ENABLED="$value" ;;
-                    fzf_prompt) FZF_PROMPT="$value" ;;
-                    fzf_pointer) FZF_POINTER="$value" ;;
-                    fzf_border) FZF_BORDER="$value" ;;
-                    fzf_border_label) FZF_BORDER_LABEL="$value" ;;
-                    fzf_colors) FZF_COLORS="$value" ;;
-                    cache_ttl) MENU_CACHE_TTL="$value" ;;
-                    exclude_patterns) EXCLUDE_PATTERNS="$value" ;;
-                esac
-            else
-                case "$key" in
-                    cmd) app_cmd="$value" ;;
-                    desc) app_desc="$value" ;;
-                    width) app_width="$value" ;;
-                    height) app_height="$value" ;;
-                    status) app_status="$value" ;;
-                    status_script) app_status_script="${value/#\~/$HOME}" ;;
-                    on_exit) app_on_exit="$value" ;;
-                    directory) app_directory="$value" ;;
-                    depth) app_depth="$value" ;;
-                    glob) app_glob="$value" ;;
-                    sort) app_sort="$value" ;;
-                    sort_direction) app_sort_direction="$value" ;;
-                    cache_ttl) app_cache_ttl="$value" ;;
-                esac
-            fi
-        fi
-    done < "$config_file"
+			if [[ "$current_section" == "settings" ]]; then
+				case "$key" in
+				icon_running) ICON_RUNNING="$value" ;;
+				icon_stopped) ICON_STOPPED="$value" ;;
+				menu_width) MENU_WIDTH="$value" ;;
+				menu_height) MENU_HEIGHT="$value" ;;
+				popup_width) APP_POPUP_WIDTH="$value" ;;
+				popup_height) APP_POPUP_HEIGHT="$value" ;;
+				just_enabled) JUST_ENABLED="$value" ;;
+				task_enabled) TASK_ENABLED="$value" ;;
+				npm_enabled) NPM_ENABLED="$value" ;;
+				fzf_prompt) FZF_PROMPT="$value" ;;
+				fzf_pointer) FZF_POINTER="$value" ;;
+				fzf_border) FZF_BORDER="$value" ;;
+				fzf_border_label) FZF_BORDER_LABEL="$value" ;;
+				fzf_colors) FZF_COLORS="$value" ;;
+				cache_ttl) MENU_CACHE_TTL="$value" ;;
+				exclude_patterns) EXCLUDE_PATTERNS="$value" ;;
+				esac
+			else
+				case "$key" in
+				cmd) app_cmd="$value" ;;
+				desc) app_desc="$value" ;;
+				width) app_width="$value" ;;
+				height) app_height="$value" ;;
+				status) app_status="$value" ;;
+				status_script) app_status_script="${value/#\~/$HOME}" ;;
+				on_exit) app_on_exit="$value" ;;
+				directory) app_directory="$value" ;;
+				depth) app_depth="$value" ;;
+				glob) app_glob="$value" ;;
+				sort) app_sort="$value" ;;
+				sort_direction) app_sort_direction="$value" ;;
+				cache_ttl) app_cache_ttl="$value" ;;
+				esac
+			fi
+		fi
+	done <"$config_file"
 
-    save_app
+	save_app
 }
 
 # Load config
 if [[ -f "$NUNCHUX_RC_FILE" ]]; then
-    parse_config "$NUNCHUX_RC_FILE"
+	parse_config "$NUNCHUX_RC_FILE"
 elif [[ -f "$NUNCHUX_RC_FALLBACK" ]]; then
-    parse_config "$NUNCHUX_RC_FALLBACK"
+	parse_config "$NUNCHUX_RC_FALLBACK"
 fi
 
 # Check if any apps or directory browsers are configured
 has_config() {
-    [[ ${#CHUCKS[@]} -gt 0 || ${#DIRBROWSE_DIR[@]} -gt 0 ]]
+	[[ ${#CHUCKS[@]} -gt 0 || ${#DIRBROWSE_DIR[@]} -gt 0 ]]
 }
 
 # Get apps from CHUCKS array
 load_apps() {
-    printf '%s\n' "${CHUCKS[@]}"
+	printf '%s\n' "${CHUCKS[@]}"
 }
 
 # Parse app spec (name:::cmd:::desc:::width:::height:::on_exit)
 get_app_name() { echo "${1%%$APP_SEP*}"; }
 get_app_command() {
-    echo "$1" | awk -F"$APP_SEP" '{print $2}'
+	echo "$1" | awk -F"$APP_SEP" '{print $2}'
 }
 get_app_description() {
-    echo "$1" | awk -F"$APP_SEP" '{print $3}'
+	echo "$1" | awk -F"$APP_SEP" '{print $3}'
 }
 get_app_width() {
-    echo "$1" | awk -F"$APP_SEP" '{print $4}'
+	echo "$1" | awk -F"$APP_SEP" '{print $4}'
 }
 get_app_height() {
-    echo "$1" | awk -F"$APP_SEP" '{print $5}'
+	echo "$1" | awk -F"$APP_SEP" '{print $5}'
 }
 get_app_on_exit() {
-    echo "$1" | awk -F"$APP_SEP" '{print $6}'
+	echo "$1" | awk -F"$APP_SEP" '{print $6}'
 }
 
 # Check if app is running (has a tmux window with that name)
 is_app_running() {
-    local name="$1"
-    tmux list-windows -F '#{window_name}' 2>/dev/null | grep -qx "$name"
+	local name="$1"
+	tmux list-windows -F '#{window_name}' 2>/dev/null | grep -qx "$name"
 }
 
 # Get list of running app windows
 get_running_apps() {
-    tmux list-windows -F '#{window_name}' 2>/dev/null || true
+	tmux list-windows -F '#{window_name}' 2>/dev/null || true
 }
 
 # Find justfile by searching upward from given directory
 find_justfile() {
-    local dir="$1"
-    while [[ "$dir" != "/" ]]; do
-        if [[ -f "$dir/justfile" || -f "$dir/Justfile" || -f "$dir/.justfile" ]]; then
-            echo "$dir"
-            return 0
-        fi
-        dir=$(dirname "$dir")
-    done
-    return 1
+	local dir="$1"
+	while [[ "$dir" != "/" ]]; do
+		if [[ -f "$dir/justfile" || -f "$dir/Justfile" || -f "$dir/.justfile" ]]; then
+			echo "$dir"
+			return 0
+		fi
+		dir=$(dirname "$dir")
+	done
+	return 1
 }
 
 # Get just recipes from a directory
 get_just_recipes() {
-    local dir="$1"
-    just --justfile "$dir/justfile" --summary 2>/dev/null || \
-    just --justfile "$dir/Justfile" --summary 2>/dev/null || \
-    just --justfile "$dir/.justfile" --summary 2>/dev/null || true
+	local dir="$1"
+	just --justfile "$dir/justfile" --summary 2>/dev/null ||
+		just --justfile "$dir/Justfile" --summary 2>/dev/null ||
+		just --justfile "$dir/.justfile" --summary 2>/dev/null || true
+}
+
+# Find Taskfile.yaml by searching upward from given directory
+find_taskfile() {
+	local dir="$1"
+	while [[ "$dir" != "/" ]]; do
+		if [[ -f "$dir/Taskfile.yaml" || -f "$dir/taskfile.yaml" || -f "$dir/Taskfile.dist.yaml" || -f "$dir/taskfile.dist.yaml" ]]; then
+			echo "$dir"
+			return 0
+		fi
+		dir=$(dirname "$dir")
+	done
+	return 1
+}
+
+# Get taskfile recipes from a directory
+# # Get taskfile recipes from a directory - REFACTORED
+# Outputs: <colored task name and desc>\t<task name>\n
+get_task_recipes() {
+	local dir="$1"
+	local taskfile=""
+
+  # Find the Taskfile variant
+	if [[ -f "$dir/Taskfile.yaml" ]]; then
+		taskfile="Taskfile.yaml"
+	elif [[ -f "$dir/taskfile.yaml" ]]; then
+		taskfile="taskfile.yaml"
+	elif [[ -f "$dir/Taskfile.dist.yaml" ]]; then
+		taskfile="Taskfile.dist.yaml"
+	elif [[ -f "$dir/taskfile.dist.yaml" ]]; then
+		taskfile="taskfile.dist.yaml"
+	fi
+
+
+	[[ -z "$taskfile" ]] && return 1
+
+	# Use a single pipeline to get the tasks.
+	# jq: extracts [name, desc] as TSV.
+	# awk: takes name ($1) and desc ($2), prepends color codes (g, c, r) to format
+	# the VISIBLE part (col 1), and appends the CLEAN name (col 2) separated by \t.
+	#task --taskfile "$taskfile" --list --json 2>/dev/null |
+	#	jq -r '.tasks[] | [.name, .desc] | @tsv' 2>/dev/null |
+	#	awk -F'\t' -v g="\033[1;32m" -v c="\033[0;36m" -v r="\033[0m" '
+  #      {
+  #          # Col 1: Colored visible text
+  #          colored_output = sprintf("» %s%-18s%s %s%s%s", g, $1, r, c, $2, r)
+  #          # Col 2: Clean task name for the command
+  #          clean_name = $1
+  #          print colored_output "\t" clean_name
+  #      }' || true
+
+  local ESC=$'\e'
+  local GREEN="${ESC}[1;32m"
+  local CYAN="${ESC}[0;36m"
+  local RESET="${ESC}[0m"
+
+  task --taskfile "$taskfile" --list --json 2>/dev/null | \
+  jq -r '.tasks[] | [.name, .desc] | @tsv' 2>/dev/null | \
+  awk -F'\t' '{printf "» %-18s %s\n", $1, $2}'
 }
 
 # Find package.json by searching upward from given directory
 find_package_json() {
-    local dir="$1"
-    while [[ "$dir" != "/" ]]; do
-        if [[ -f "$dir/package.json" ]]; then
-            echo "$dir"
-            return 0
-        fi
-        dir=$(dirname "$dir")
-    done
-    return 1
+	local dir="$1"
+	while [[ "$dir" != "/" ]]; do
+		if [[ -f "$dir/package.json" ]]; then
+			echo "$dir"
+			return 0
+		fi
+		dir=$(dirname "$dir")
+	done
+	return 1
 }
 
 # Get npm scripts from a directory
 get_npm_scripts() {
-    local dir="$1"
-    if command -v jq &>/dev/null; then
-        jq -r '.scripts // {} | keys[]' "$dir/package.json" 2>/dev/null || true
-    else
-        # Fallback without jq - basic grep approach
-        grep -oP '(?<="scripts"\s*:\s*\{)[^}]*' "$dir/package.json" 2>/dev/null | \
-            grep -oP '"[^"]+"\s*:' | tr -d '":' | tr -s ' ' '\n' || true
-    fi
+	local dir="$1"
+	if command -v jq &>/dev/null; then
+		jq -r '.scripts // {} | keys[]' "$dir/package.json" 2>/dev/null || true
+	else
+		# Fallback without jq - basic grep approach
+		grep -oP '(?<="scripts"\s*:\s*\{)[^}]*' "$dir/package.json" 2>/dev/null |
+			grep -oP '"[^"]+"\s*:' | tr -d '":' | tr -s ' ' '\n' || true
+	fi
 }
 
 # Nunchucks ASCII art for popups
 show_nunchucks_popup() {
-    local top_message="$1"
-    local bottom_message="$2"
-    local top_color="${3:-1;33}"  # default yellow
-    local script_file="/tmp/nunchux-popup-$$"
+	local top_message="$1"
+	local bottom_message="$2"
+	local top_color="${3:-1;33}" # default yellow
+	local script_file="/tmp/nunchux-popup-$$"
 
-    cat > "$script_file" << NUNCHUX_EOF
+	cat >"$script_file" <<NUNCHUX_EOF
 #!/usr/bin/env bash
 
 center() {
@@ -424,18 +488,18 @@ read -n 1 -s
 rm -f "\$0"
 NUNCHUX_EOF
 
-    chmod +x "$script_file"
-    tmux run-shell -b "sleep 0.05; tmux display-popup -E -b rounded -w $MENU_WIDTH -h $MENU_HEIGHT '$script_file'"
-    exit 0
+	chmod +x "$script_file"
+	tmux run-shell -b "sleep 0.05; tmux display-popup -E -b rounded -w $MENU_WIDTH -h $MENU_HEIGHT '$script_file'"
+	exit 0
 }
 
 # No config popup - offers to create initial config
 show_no_config_popup() {
-    local script_file="/tmp/nunchux-noconfig-$$"
-    local config_dir="$NUNCHUX_CONFIG_DIR"
-    local config_file="$NUNCHUX_RC_FILE"
+	local script_file="/tmp/nunchux-noconfig-$$"
+	local config_dir="$NUNCHUX_CONFIG_DIR"
+	local config_file="$NUNCHUX_RC_FILE"
 
-    cat > "$script_file" << 'NOCONFIG_EOF'
+	cat >"$script_file" <<'NOCONFIG_EOF'
 #!/usr/bin/env bash
 CONFIG_DIR="$1"
 CONFIG_FILE="$2"
@@ -462,13 +526,13 @@ show_menu() {
     echo ""
 NOCONFIG_EOF
 
-    # Append the nunchucks art to the script
-    while IFS= read -r line; do
-        # Escape any special characters for the heredoc
-        printf '    center "%s"\n' "$line" >> "$script_file"
-    done <<< "$NUNCHUCKS_ART"
+	# Append the nunchucks art to the script
+	while IFS= read -r line; do
+		# Escape any special characters for the heredoc
+		printf '    center "%s"\n' "$line" >>"$script_file"
+	done <<<"$NUNCHUCKS_ART"
 
-    cat >> "$script_file" << 'NOCONFIG_EOF2'
+	cat >>"$script_file" <<'NOCONFIG_EOF2'
     echo ""
     echo ""
     center "\033[1;32m[Enter]\033[0m \033[90mCreate config at $CONFIG_FILE\033[0m"
@@ -545,167 +609,167 @@ while true; do
 done
 NOCONFIG_EOF2
 
-    chmod +x "$script_file"
-    tmux display-popup -E -b rounded -w "$MENU_WIDTH" -h "$MENU_HEIGHT" "$script_file" "$config_dir" "$config_file"
-    exit 0
+	chmod +x "$script_file"
+	tmux display-popup -E -b rounded -w "$MENU_WIDTH" -h "$MENU_HEIGHT" "$script_file" "$config_dir" "$config_file"
+	exit 0
 }
 
 # Easter egg function
 show_chuck_easter_egg() {
-    local fact="${CHUCK_FACTS[$RANDOM % ${#CHUCK_FACTS[@]}]}"
-    show_nunchucks_popup "You can't open a submenu in a window" "$fact"
+	local fact="${CHUCK_FACTS[$RANDOM % ${#CHUCK_FACTS[@]}]}"
+	show_nunchucks_popup "You can't open a submenu in a window" "$fact"
 }
 
 # Cache helper functions
 get_main_menu_cache_file() {
-    echo "/tmp/nunchux-main-menu.cache"
+	echo "/tmp/nunchux-main-menu.cache"
 }
 
 get_main_menu_socket() {
-    echo "/tmp/nunchux-fzf-main-$$.sock"
+	echo "/tmp/nunchux-fzf-main-$$.sock"
 }
 
 get_submenu_cache_file() {
-    local name="$1"
-    echo "/tmp/nunchux-submenu-${name}.cache"
+	local name="$1"
+	echo "/tmp/nunchux-submenu-${name}.cache"
 }
 
 get_submenu_socket() {
-    local name="$1"
-    echo "/tmp/nunchux-fzf-submenu-${name}-$$.sock"
+	local name="$1"
+	echo "/tmp/nunchux-fzf-submenu-${name}-$$.sock"
 }
 
 get_dirbrowse_cache_file() {
-    local name="$1"
-    echo "/tmp/nunchux-dirbrowse-${name}.cache"
+	local name="$1"
+	echo "/tmp/nunchux-dirbrowse-${name}.cache"
 }
 
 get_dirbrowse_socket() {
-    local name="$1"
-    echo "/tmp/nunchux-fzf-${name}-$$.sock"
+	local name="$1"
+	echo "/tmp/nunchux-fzf-${name}-$$.sock"
 }
 
 is_cache_valid() {
-    local cache_file="$1"
-    local ttl="${2:-300}"
+	local cache_file="$1"
+	local ttl="${2:-300}"
 
-    # TTL of 0 means caching disabled
-    [[ "$ttl" == "0" ]] && return 1
-    [[ ! -f "$cache_file" ]] && return 1
+	# TTL of 0 means caching disabled
+	[[ "$ttl" == "0" ]] && return 1
+	[[ ! -f "$cache_file" ]] && return 1
 
-    local cache_age=$(( $(date +%s) - $(get_mtime "$cache_file") ))
-    [[ $cache_age -lt $ttl ]]
+	local cache_age=$(($(date +%s) - $(get_mtime "$cache_file")))
+	[[ $cache_age -lt $ttl ]]
 }
 
 # Refresh main menu cache and hot-swap via socket
 refresh_main_menu_cache() {
-    local socket="$1"
-    local cache_file
-    cache_file=$(get_main_menu_cache_file)
+	local socket="$1"
+	local cache_file
+	cache_file=$(get_main_menu_cache_file)
 
-    # Rebuild menu to temp file first
-    build_menu > "${cache_file}.new" 2>/dev/null
-    mv "${cache_file}.new" "$cache_file"
+	# Rebuild menu to temp file first
+	build_menu >"${cache_file}.new" 2>/dev/null
+	mv "${cache_file}.new" "$cache_file"
 
-    # Hot-swap via socket if fzf is still running
-    if [[ -S "$socket" ]]; then
-        curl --silent --unix-socket "$socket" "http://localhost" \
-            -d "reload(cat '$cache_file')" 2>/dev/null || true
-    fi
+	# Hot-swap via socket if fzf is still running
+	if [[ -S "$socket" ]]; then
+		curl --silent --unix-socket "$socket" "http://localhost" \
+			-d "reload(cat '$cache_file')" 2>/dev/null || true
+	fi
 }
 
 # Refresh submenu cache and hot-swap via socket
 refresh_submenu_cache() {
-    local submenu="$1"
-    local socket="$2"
-    local cache_file
-    cache_file=$(get_submenu_cache_file "$submenu")
+	local submenu="$1"
+	local socket="$2"
+	local cache_file
+	cache_file=$(get_submenu_cache_file "$submenu")
 
-    # Temporarily set CURRENT_SUBMENU for build_menu
-    local saved_submenu="$CURRENT_SUBMENU"
-    CURRENT_SUBMENU="$submenu"
+	# Temporarily set CURRENT_SUBMENU for build_menu
+	local saved_submenu="$CURRENT_SUBMENU"
+	CURRENT_SUBMENU="$submenu"
 
-    # Rebuild menu to temp file first
-    build_menu > "${cache_file}.new" 2>/dev/null
-    mv "${cache_file}.new" "$cache_file"
+	# Rebuild menu to temp file first
+	build_menu >"${cache_file}.new" 2>/dev/null
+	mv "${cache_file}.new" "$cache_file"
 
-    CURRENT_SUBMENU="$saved_submenu"
+	CURRENT_SUBMENU="$saved_submenu"
 
-    # Hot-swap via socket if fzf is still running
-    if [[ -S "$socket" ]]; then
-        curl --silent --unix-socket "$socket" "http://localhost" \
-            -d "reload(cat '$cache_file')" 2>/dev/null || true
-    fi
+	# Hot-swap via socket if fzf is still running
+	if [[ -S "$socket" ]]; then
+		curl --silent --unix-socket "$socket" "http://localhost" \
+			-d "reload(cat '$cache_file')" 2>/dev/null || true
+	fi
 }
 
 # Refresh dirbrowse cache and hot-swap fzf content via socket
 refresh_dirbrowse_cache() {
-    local name="$1"
-    local socket="$2"
-    local cache_file
-    cache_file=$(get_dirbrowse_cache_file "$name")
+	local name="$1"
+	local socket="$2"
+	local cache_file
+	cache_file=$(get_dirbrowse_cache_file "$name")
 
-    # Rebuild menu to temp file first
-    build_dirbrowse_menu "$name" > "${cache_file}.new" 2>/dev/null
-    mv "${cache_file}.new" "$cache_file"
+	# Rebuild menu to temp file first
+	build_dirbrowse_menu "$name" >"${cache_file}.new" 2>/dev/null
+	mv "${cache_file}.new" "$cache_file"
 
-    # Hot-swap via socket if fzf is still running
-    if [[ -S "$socket" ]]; then
-        curl --silent --unix-socket "$socket" "http://localhost" \
-            -d "reload(cat '$cache_file')" 2>/dev/null || true
-    fi
+	# Hot-swap via socket if fzf is still running
+	if [[ -S "$socket" ]]; then
+		curl --silent --unix-socket "$socket" "http://localhost" \
+			-d "reload(cat '$cache_file')" 2>/dev/null || true
+	fi
 }
 
 # Build directory browser file list
 build_dirbrowse_menu() {
-    local name="$1"
-    local dir="${DIRBROWSE_DIR[$name]}"
-    local depth="${DIRBROWSE_DEPTH[$name]:-1}"
-    local glob_pattern="${DIRBROWSE_GLOB[$name]:-}"
-    local width="${DIRBROWSE_WIDTH[$name]:-90}"
-    local height="${DIRBROWSE_HEIGHT[$name]:-80}"
-    local sort_mode="${DIRBROWSE_SORT[$name]:-modified}"
-    local sort_dir="${DIRBROWSE_SORT_DIR[$name]:-descending}"
+	local name="$1"
+	local dir="${DIRBROWSE_DIR[$name]}"
+	local depth="${DIRBROWSE_DEPTH[$name]:-1}"
+	local glob_pattern="${DIRBROWSE_GLOB[$name]:-}"
+	local width="${DIRBROWSE_WIDTH[$name]:-90}"
+	local height="${DIRBROWSE_HEIGHT[$name]:-80}"
+	local sort_mode="${DIRBROWSE_SORT[$name]:-modified}"
+	local sort_dir="${DIRBROWSE_SORT_DIR[$name]:-descending}"
 
-    # Build find command with depth and exclusions
-    local find_args=()
-    find_args+=("$dir" -maxdepth "$depth" -type f)
-    # Apply exclusion patterns from config
-    # Patterns starting with * are filename globs, others are directory names
-    IFS=',' read -ra exclude_patterns <<< "$EXCLUDE_PATTERNS"
-    for pattern in "${exclude_patterns[@]}"; do
-        # Trim whitespace
-        pattern="${pattern#"${pattern%%[![:space:]]*}"}"
-        pattern="${pattern%"${pattern##*[![:space:]]}"}"
-        [[ -z "$pattern" ]] && continue
+	# Build find command with depth and exclusions
+	local find_args=()
+	find_args+=("$dir" -maxdepth "$depth" -type f)
+	# Apply exclusion patterns from config
+	# Patterns starting with * are filename globs, others are directory names
+	IFS=',' read -ra exclude_patterns <<<"$EXCLUDE_PATTERNS"
+	for pattern in "${exclude_patterns[@]}"; do
+		# Trim whitespace
+		pattern="${pattern#"${pattern%%[![:space:]]*}"}"
+		pattern="${pattern%"${pattern##*[![:space:]]}"}"
+		[[ -z "$pattern" ]] && continue
 
-        if [[ "$pattern" == \** ]]; then
-            # Glob pattern - match filename only
-            find_args+=(! -name "$pattern")
-        else
-            # Directory/file name - exclude both paths containing it and files named it
-            find_args+=(! -path "*/$pattern/*" ! -name "$pattern")
-        fi
-    done
+		if [[ "$pattern" == \** ]]; then
+			# Glob pattern - match filename only
+			find_args+=(! -name "$pattern")
+		else
+			# Directory/file name - exclude both paths containing it and files named it
+			find_args+=(! -path "*/$pattern/*" ! -name "$pattern")
+		fi
+	done
 
-    # Apply glob filter if specified
-    if [[ -n "$glob_pattern" ]]; then
-        find_args+=(-name "$glob_pattern")
-    fi
+	# Apply glob filter if specified
+	if [[ -n "$glob_pattern" ]]; then
+		find_args+=(-name "$glob_pattern")
+	fi
 
-    local now
-    now=$(date +%s)
+	local now
+	now=$(date +%s)
 
-    # Set sort direction flag
-    local sort_flag=""
-    [[ "$sort_dir" == "descending" ]] && sort_flag="-r"
+	# Set sort direction flag
+	local sort_flag=""
+	[[ "$sort_dir" == "descending" ]] && sort_flag="-r"
 
-    # Generate sorted file list based on sort mode
-    local sorted_files
-    case "$sort_mode" in
-        alphabetical)
-            # Sort by folder/filename alphabetically
-            sorted_files=$(find_with_mtime "${find_args[@]}" | awk -F'\t' -v dir="$dir" '
+	# Generate sorted file list based on sort mode
+	local sorted_files
+	case "$sort_mode" in
+	alphabetical)
+		# Sort by folder/filename alphabetically
+		sorted_files=$(find_with_mtime "${find_args[@]}" | awk -F'\t' -v dir="$dir" '
             {
                 mtime = $1
                 file = $2
@@ -716,10 +780,10 @@ build_dirbrowse_menu() {
                 print rel "\t" mtime "\t" folder "\t" file
             }
             ' | sort -t$'\t' -k1 $sort_flag)
-            ;;
-        modified-folder)
-            # Folders ordered by most recent file, files within folder by recency
-            sorted_files=$(find_with_mtime "${find_args[@]}" | awk -F'\t' -v dir="$dir" '
+		;;
+	modified-folder)
+		# Folders ordered by most recent file, files within folder by recency
+		sorted_files=$(find_with_mtime "${find_args[@]}" | awk -F'\t' -v dir="$dir" '
             {
                 mtime = $1
                 file = $2
@@ -740,10 +804,10 @@ build_dirbrowse_menu() {
                 }
             }
             ' | sort -t$'\t' -k1 ${sort_flag}n -k2 ${sort_flag}n)
-            ;;
-        modified|*)
-            # Simple sort by modification time
-            sorted_files=$(find_with_mtime "${find_args[@]}" | awk -F'\t' -v dir="$dir" '
+		;;
+	modified | *)
+		# Simple sort by modification time
+		sorted_files=$(find_with_mtime "${find_args[@]}" | awk -F'\t' -v dir="$dir" '
             {
                 mtime = $1
                 file = $2
@@ -754,240 +818,268 @@ build_dirbrowse_menu() {
                 print mtime "\t" mtime "\t" folder "\t" file
             }
             ' | sort -t$'\t' -k1 ${sort_flag}n)
-            ;;
-    esac
+		;;
+	esac
 
-    # Format output
-    echo "$sorted_files" | while IFS=$'\t' read -r _sort_key mtime folder file; do
-        [[ -z "$file" ]] && continue
+	# Format output
+	echo "$sorted_files" | while IFS=$'\t' read -r _sort_key mtime folder file; do
+		[[ -z "$file" ]] && continue
 
-        # Get folder/filename display with folder colored
-        local filename display
-        filename=$(basename "$file")
-        if [[ "$folder" == "$filename" ]]; then
-            display="$filename"
-        else
-            # Color folder in muted gray (matching header/border style)
-            display=$'\033[38;5;244m'"$folder/"$'\033[0m'"$filename"
-        fi
+		# Get folder/filename display with folder colored
+		local filename display
+		filename=$(basename "$file")
+		if [[ "$folder" == "$filename" ]]; then
+			display="$filename"
+		else
+			# Color folder in muted gray (matching header/border style)
+			display=$'\033[38;5;244m'"$folder/"$'\033[0m'"$filename"
+		fi
 
-        # Calculate ago from mtime (truncate decimals)
-        local secs=$(( now - ${mtime%%.*} ))
-        local modified
-        if [[ $secs -lt 60 ]]; then modified="${secs}s ago"
-        elif [[ $secs -lt 3600 ]]; then modified="$((secs/60))m ago"
-        elif [[ $secs -lt 86400 ]]; then modified="$((secs/3600))h ago"
-        else modified="$((secs/86400))d ago"; fi
+		# Calculate ago from mtime (truncate decimals)
+		local secs=$((now - ${mtime%%.*}))
+		local modified
+		if [[ $secs -lt 60 ]]; then
+			modified="${secs}s ago"
+		elif [[ $secs -lt 3600 ]]; then
+			modified="$((secs / 60))m ago"
+		elif [[ $secs -lt 86400 ]]; then
+			modified="$((secs / 3600))h ago"
+		else modified="$((secs / 86400))d ago"; fi
 
-        # Format: visible_part \t full_path \t width \t height
-        printf "○  %8s │ %s\t%s\t%s\t%s\n" "$modified" "$display" "$file" "$width" "$height"
-    done
+		# Format: visible_part \t full_path \t width \t height
+		printf "○  %8s │ %s\t%s\t%s\t%s\n" "$modified" "$display" "$file" "$width" "$height"
+	done
 }
 
 # Build the fzf menu entries
 build_menu() {
-    local running_apps
-    running_apps=$(get_running_apps)
+	local running_apps
+	running_apps=$(get_running_apps)
 
-    # If in main menu, show submenu entries first (including directory browsers)
-    if [[ -z "$CURRENT_SUBMENU" && -z "$CURRENT_DIRBROWSE" ]]; then
-        for submenu in "${!SUBMENUS[@]}"; do
-            local submenu_desc="" submenu_status=""
-            # Get submenu description
-            if [[ -n "${SUBMENU_DESC[$submenu]:-}" ]]; then
-                submenu_desc="${SUBMENU_DESC[$submenu]}"
-            fi
-            # Run submenu status command if defined
-            if [[ -n "${SUBMENU_STATUS[$submenu]:-}" ]]; then
-                submenu_status=$(eval "${SUBMENU_STATUS[$submenu]}" 2>/dev/null || true)
-                if [[ -n "$submenu_status" ]]; then
-                    if [[ -n "$submenu_desc" ]]; then
-                        submenu_desc="$submenu_desc $submenu_status"
-                    else
-                        submenu_desc="$submenu_status"
-                    fi
-                fi
-            fi
-            # Format: visible_part \t name \t command \t width \t height \t on_exit
-            # Use special submenu: prefix for name to identify it
-            printf "▸  %-12s  %s\t%s\t%s\t%s\t%s\t%s\n" "$submenu" "$submenu_desc" "submenu:$submenu" "" "" ""
-        done
-        # Show directory browser entries
-        for dirbrowse in "${!DIRBROWSE_DIR[@]}"; do
-            local dir="${DIRBROWSE_DIR[$dirbrowse]}"
-            local file_count
-            file_count=$(find "$dir" -type f 2>/dev/null | head -1000 | wc -l | tr -d ' ')
-            printf "▸  %-12s  (%s files)\t%s\t%s\t%s\t%s\t%s\n" "$dirbrowse" "$file_count" "dirbrowse:$dirbrowse" "" "" ""
-        done
-    fi
+	# If in main menu, show submenu entries first (including directory browsers)
+	if [[ -z "$CURRENT_SUBMENU" && -z "$CURRENT_DIRBROWSE" ]]; then
+		for submenu in "${!SUBMENUS[@]}"; do
+			local submenu_desc="" submenu_status=""
+			# Get submenu description
+			if [[ -n "${SUBMENU_DESC[$submenu]:-}" ]]; then
+				submenu_desc="${SUBMENU_DESC[$submenu]}"
+			fi
+			# Run submenu status command if defined
+			if [[ -n "${SUBMENU_STATUS[$submenu]:-}" ]]; then
+				submenu_status=$(eval "${SUBMENU_STATUS[$submenu]}" 2>/dev/null || true)
+				if [[ -n "$submenu_status" ]]; then
+					if [[ -n "$submenu_desc" ]]; then
+						submenu_desc="$submenu_desc $submenu_status"
+					else
+						submenu_desc="$submenu_status"
+					fi
+				fi
+			fi
+			# Format: visible_part \t name \t command \t width \t height \t on_exit
+			# Use special submenu: prefix for name to identify it
+			printf "▸  %-12s  %s\t%s\t%s\t%s\t%s\t%s\n" "$submenu" "$submenu_desc" "submenu:$submenu" "" "" ""
+		done
+		# Show directory browser entries
+		for dirbrowse in "${!DIRBROWSE_DIR[@]}"; do
+			local dir="${DIRBROWSE_DIR[$dirbrowse]}"
+			local file_count
+			file_count=$(find "$dir" -type f 2>/dev/null | head -1000 | wc -l | tr -d ' ')
+			printf "▸  %-12s  (%s files)\t%s\t%s\t%s\t%s\t%s\n" "$dirbrowse" "$file_count" "dirbrowse:$dirbrowse" "" "" ""
+		done
+	fi
 
-    while IFS= read -r app; do
-        local full_name name display_name cmd desc width height on_exit icon status_output
-        full_name=$(get_app_name "$app")
-        cmd=$(get_app_command "$app")
-        desc=$(get_app_description "$app")
-        width=$(get_app_width "$app")
-        height=$(get_app_height "$app")
-        on_exit=$(get_app_on_exit "$app")
+	while IFS= read -r app; do
+		local full_name name display_name cmd desc width height on_exit icon status_output
+		full_name=$(get_app_name "$app")
+		cmd=$(get_app_command "$app")
+		desc=$(get_app_description "$app")
+		width=$(get_app_width "$app")
+		height=$(get_app_height "$app")
+		on_exit=$(get_app_on_exit "$app")
 
-        # Handle submenu filtering
-        if [[ -z "$CURRENT_SUBMENU" ]]; then
-            # Main menu: skip items that belong to a submenu
-            [[ "$full_name" == */* ]] && continue
-            display_name="$full_name"
-            name="$full_name"
-        else
-            # Submenu mode: only show items in this submenu
-            [[ "$full_name" != "$CURRENT_SUBMENU/"* ]] && continue
-            # Display name is the part after the /
-            display_name="${full_name#*/}"
-            name="$full_name"
-        fi
+		# Handle submenu filtering
+		if [[ -z "$CURRENT_SUBMENU" ]]; then
+			# Main menu: skip items that belong to a submenu
+			[[ "$full_name" == */* ]] && continue
+			display_name="$full_name"
+			name="$full_name"
+		else
+			# Submenu mode: only show items in this submenu
+			[[ "$full_name" != "$CURRENT_SUBMENU/"* ]] && continue
+			# Display name is the part after the /
+			display_name="${full_name#*/}"
+			name="$full_name"
+		fi
 
-        if echo "$running_apps" | grep -qx "$name"; then
-            icon="$ICON_RUNNING"
-        else
-            icon="$ICON_STOPPED"
-        fi
+		if echo "$running_apps" | grep -qx "$name"; then
+			icon="$ICON_RUNNING"
+		else
+			icon="$ICON_STOPPED"
+		fi
 
-        # Run status command if defined
-        if [[ -n "${CHUCK_STATUS[$name]:-}" ]]; then
-            status_output=$(eval "${CHUCK_STATUS[$name]}" 2>/dev/null || true)
-            if [[ -n "$status_output" ]]; then
-                if [[ -n "$desc" ]]; then
-                    desc="$desc $status_output"
-                else
-                    desc="$status_output"
-                fi
-            fi
-        fi
+		# Run status command if defined
+		if [[ -n "${CHUCK_STATUS[$name]:-}" ]]; then
+			status_output=$(eval "${CHUCK_STATUS[$name]}" 2>/dev/null || true)
+			if [[ -n "$status_output" ]]; then
+				if [[ -n "$desc" ]]; then
+					desc="$desc $status_output"
+				else
+					desc="$status_output"
+				fi
+			fi
+		fi
 
-        # Format: visible_part \t name \t command \t width \t height \t on_exit
-        printf "%s  %-12s  %s\t%s\t%s\t%s\t%s\t%s\n" "$icon" "$display_name" "$desc" "$name" "$cmd" "$width" "$height" "$on_exit"
-    done < <(load_apps)
+		# Format: visible_part \t name \t command \t width \t height \t on_exit
+		printf "%s  %-12s  %s\t%s\t%s\t%s\t%s\t%s\n" "$icon" "$display_name" "$desc" "$name" "$cmd" "$width" "$height" "$on_exit"
+	done < <(load_apps)
 
-    # Add just recipes if justfile exists and enabled
-    if [[ "$JUST_ENABLED" == "true" ]]; then
-        local current_dir justfile_dir recipes
-        current_dir=$(get_current_dir)
-        if justfile_dir=$(find_justfile "$current_dir"); then
-            recipes=$(get_just_recipes "$justfile_dir")
-            if [[ -n "$recipes" ]]; then
-                # Divider
-                printf "   ─── just ───────────────────\t\t\t\t\t\n"
-                for recipe in $recipes; do
-                    # Format: visible_part \t name \t command \t width \t height
-                    printf "»  %-12s  %s\t%s\t%s\t%s\t%s\n" "$recipe" "" "just:$recipe" "cd $justfile_dir && just $recipe" "" ""
-                done
-            fi
-        fi
-    fi
+	# Add just recipes if justfile exists and enabled
+	if [[ "$JUST_ENABLED" == "true" ]]; then
+		local current_dir justfile_dir recipes
+		current_dir=$(get_current_dir)
+		if justfile_dir=$(find_justfile "$current_dir"); then
+			recipes=$(get_just_recipes "$justfile_dir")
+			if [[ -n "$recipes" ]]; then
+				# Divider
+				printf "   ─── just ───────────────────\t\t\t\t\t\n"
+				for recipe in $recipes; do
+					# Format: visible_part \t name \t command \t width \t height
+					printf "»  %-12s  %s\t%s\t%s\t%s\t%s\n" "$recipe" "" "just:$recipe" "cd $justfile_dir && just $recipe" "" ""
+				done
+			fi
+		fi
+	fi
 
-    # Add npm scripts if package.json exists and enabled
-    if [[ "$NPM_ENABLED" == "true" ]]; then
-        local current_dir pkg_dir scripts
-        current_dir=$(get_current_dir)
-        if pkg_dir=$(find_package_json "$current_dir"); then
-            scripts=$(get_npm_scripts "$pkg_dir")
-            if [[ -n "$scripts" ]]; then
-                # Divider
-                printf "   ─── npm ────────────────────\t\t\t\t\t\n"
-                while IFS= read -r script; do
-                    [[ -z "$script" ]] && continue
-                    # Format: visible_part \t name \t command \t width \t height
-                    printf "»  %-12s  %s\t%s\t%s\t%s\t%s\n" "$script" "" "npm:$script" "cd $pkg_dir && npm run $script" "" ""
-                done <<< "$scripts"
-            fi
-        fi
-    fi
+  # Add taskfile recipes if Taskfile.yaml exists and enabled
+	if [[ "$TASK_ENABLED" == "true" ]]; then
+		local current_dir taskfile_dir recipes
+		current_dir=$(get_current_dir)
+
+		if taskfile_dir=$(find_taskfile "$current_dir"); then
+			recipes=$(get_task_recipes "$taskfile_dir")
+
+			if [[ -n "$recipes" ]]; then
+        # Divider
+				printf "   ─── task ───────────────────\t\t\t\t\t\n"
+
+        # Read recipes line-by-line, splitting on the tab separator
+				while IFS=$'\t' read -r visible_part recipe_name; do
+					[[ -z "$visible_part" ]] && continue
+          printf "%b\t%s\t%s\t%s\t%s\t%s\n" \
+                    "$visible_part" \
+                    "task:$recipe_name" \
+                    "cd $taskfile_dir && task $recipe_name" \
+                    "" "" ""
+				done <<<"$recipes"
+			fi
+		fi
+	fi
+
+	# Add npm scripts if package.json exists and enabled
+	if [[ "$NPM_ENABLED" == "true" ]]; then
+		local current_dir pkg_dir scripts
+		current_dir=$(get_current_dir)
+		if pkg_dir=$(find_package_json "$current_dir"); then
+			scripts=$(get_npm_scripts "$pkg_dir")
+			if [[ -n "$scripts" ]]; then
+				# Divider
+				printf "   ─── npm ────────────────────\t\t\t\t\t\n"
+				while IFS= read -r script; do
+					[[ -z "$script" ]] && continue
+					# Format: visible_part \t name \t command \t width \t height
+					printf "»  %-12s  %s\t%s\t%s\t%s\t%s\n" "$script" "" "npm:$script" "cd $pkg_dir && npm run $script" "" ""
+				done <<<"$scripts"
+			fi
+		fi
+	fi
 }
 
 # Build common fzf options array
 # Usage: build_fzf_opts opts_array "header text" "border label"
 build_fzf_opts() {
-    local -n opts=$1
-    local header="$2"
-    local border_label="$3"
-    opts=(
-        --delimiter='\t'
-        --with-nth=1
-        --tiebreak=begin
-        --header="$header"
-        --header-first
-        --prompt="$FZF_PROMPT"
-        --pointer="$FZF_POINTER"
-        --layout=reverse
-        --height=100%
-        --border="$FZF_BORDER"
-        --border-label="$border_label"
-        --border-label-pos=3
-        --no-preview
-        --expect=ctrl-o
-        --color="$FZF_COLORS"
-    )
+	local -n opts=$1
+	local header="$2"
+	local border_label="$3"
+	opts=(
+		--delimiter='\t'
+		--with-nth=1
+		--tiebreak=begin
+		--header="$header"
+		--header-first
+		--prompt="$FZF_PROMPT"
+		--pointer="$FZF_POINTER"
+		--layout=reverse
+		--height=100%
+		--border="$FZF_BORDER"
+		--border-label="$border_label"
+		--border-label-pos=3
+		--no-preview
+		--expect=ctrl-o
+		--color="$FZF_COLORS"
+	)
 }
 
 # Get current pane's working directory
 get_current_dir() {
-    tmux display-message -p '#{pane_current_path}' 2>/dev/null || pwd
+	tmux display-message -p '#{pane_current_path}' 2>/dev/null || pwd
 }
 
 # Switch to an existing app window
 switch_to_app() {
-    local name="$1"
-    tmux select-window -t "$name" 2>/dev/null
+	local name="$1"
+	tmux select-window -t "$name" 2>/dev/null
 }
 
 # Open a new app in a new tmux window
 open_app() {
-    local name="$1"
-    local cmd="$2"
-    local dir
-    dir=$(get_current_dir)
+	local name="$1"
+	local cmd="$2"
+	local dir
+	dir=$(get_current_dir)
 
-    # Create new window with the app
-    tmux new-window -n "$name" -c "$dir" "$cmd"
+	# Create new window with the app
+	tmux new-window -n "$name" -c "$dir" "$cmd"
 }
 
 # Open app in a new popup with app-specific dimensions
 open_popup() {
-    local name="$1"
-    local cmd="$2"
-    local app_width="$3"
-    local app_height="$4"
-    local on_exit="$5"
-    local dir
-    dir=$(get_current_dir)
+	local name="$1"
+	local cmd="$2"
+	local app_width="$3"
+	local app_height="$4"
+	local on_exit="$5"
+	local dir
+	dir=$(get_current_dir)
 
-    # Use app-specific dimensions, fall back to defaults
-    local width height
-    width="${app_width:-$APP_POPUP_WIDTH}"
-    height="${app_height:-$APP_POPUP_HEIGHT}"
-    # Add % suffix if just a number
-    [[ "$width" =~ ^[0-9]+$ ]] && width="${width}%"
-    [[ "$height" =~ ^[0-9]+$ ]] && height="${height}%"
+	# Use app-specific dimensions, fall back to defaults
+	local width height
+	width="${app_width:-$APP_POPUP_WIDTH}"
+	height="${app_height:-$APP_POPUP_HEIGHT}"
+	# Add % suffix if just a number
+	[[ "$width" =~ ^[0-9]+$ ]] && width="${width}%"
+	[[ "$height" =~ ^[0-9]+$ ]] && height="${height}%"
 
-    # Set up variables for substitution
-    local pane_id tmp script_file
-    pane_id=$(tmux display-message -p '#{pane_id}')
-    tmp="/tmp/nunchux-tmp-$$"
-    script_file="/tmp/nunchux-script-$$"
+	# Set up variables for substitution
+	local pane_id tmp script_file
+	pane_id=$(tmux display-message -p '#{pane_id}')
+	tmp="/tmp/nunchux-tmp-$$"
+	script_file="/tmp/nunchux-script-$$"
 
-    # Substitute variables in cmd and on_exit
-    local expanded_cmd="$cmd"
-    local expanded_on_exit="${on_exit:-}"
-    expanded_cmd="${expanded_cmd//\{pane_id\}/$pane_id}"
-    expanded_cmd="${expanded_cmd//\{tmp\}/$tmp}"
-    expanded_cmd="${expanded_cmd//\{dir\}/$dir}"
-    expanded_on_exit="${expanded_on_exit//\{pane_id\}/$pane_id}"
-    expanded_on_exit="${expanded_on_exit//\{tmp\}/$tmp}"
-    expanded_on_exit="${expanded_on_exit//\{dir\}/$dir}"
+	# Substitute variables in cmd and on_exit
+	local expanded_cmd="$cmd"
+	local expanded_on_exit="${on_exit:-}"
+	expanded_cmd="${expanded_cmd//\{pane_id\}/$pane_id}"
+	expanded_cmd="${expanded_cmd//\{tmp\}/$tmp}"
+	expanded_cmd="${expanded_cmd//\{dir\}/$dir}"
+	expanded_on_exit="${expanded_on_exit//\{pane_id\}/$pane_id}"
+	expanded_on_exit="${expanded_on_exit//\{tmp\}/$tmp}"
+	expanded_on_exit="${expanded_on_exit//\{dir\}/$dir}"
 
-    # Pick a random Chuck Norris fact for potential error display
-    local fact="${CHUCK_FACTS[$RANDOM % ${#CHUCK_FACTS[@]}]}"
+	# Pick a random Chuck Norris fact for potential error display
+	local fact="${CHUCK_FACTS[$RANDOM % ${#CHUCK_FACTS[@]}]}"
 
-    # Write command to temp script with error handling
-    cat > "$script_file" << NUNCHUX_EOF
+	# Write command to temp script with error handling
+	cat >"$script_file" <<NUNCHUX_EOF
 #!/usr/bin/env bash
 export PATH="$NUNCHUX_BIN_DIR:\$PATH"
 cd "$dir"
@@ -1038,252 +1130,252 @@ fi
 
 rm -f "$script_file"
 NUNCHUX_EOF
-    chmod +x "$script_file"
+	chmod +x "$script_file"
 
-    tmux run-shell -b "sleep 0.05; tmux display-popup -E -b rounded -T ' nunchux: $name ' -w $width -h $height '$script_file'"
-    exit 0
+	tmux run-shell -b "sleep 0.05; tmux display-popup -E -b rounded -T ' nunchux: $name ' -w $width -h $height '$script_file'"
+	exit 0
 }
 
 # Kill a running app window
 kill_app() {
-    local name="$1"
-    if is_app_running "$name"; then
-        tmux kill-window -t "$name" 2>/dev/null
-        echo "Killed: $name"
-    fi
+	local name="$1"
+	if is_app_running "$name"; then
+		tmux kill-window -t "$name" 2>/dev/null
+		echo "Killed: $name"
+	fi
 }
 
 # Launch directory browser
 launch_dirbrowse() {
-    local name="$1"
-    local width="${DIRBROWSE_WIDTH[$name]:-90}"
-    local height="${DIRBROWSE_HEIGHT[$name]:-80}"
-    local cache_ttl="${DIRBROWSE_CACHE_TTL[$name]:-300}"
-    [[ "$width" =~ ^[0-9]+$ ]] && width="${width}%"
-    [[ "$height" =~ ^[0-9]+$ ]] && height="${height}%"
+	local name="$1"
+	local width="${DIRBROWSE_WIDTH[$name]:-90}"
+	local height="${DIRBROWSE_HEIGHT[$name]:-80}"
+	local cache_ttl="${DIRBROWSE_CACHE_TTL[$name]:-300}"
+	[[ "$width" =~ ^[0-9]+$ ]] && width="${width}%"
+	[[ "$height" =~ ^[0-9]+$ ]] && height="${height}%"
 
-    local cache_file socket selection
-    cache_file=$(get_dirbrowse_cache_file "$name")
-    socket=$(get_dirbrowse_socket "$name")
+	local cache_file socket selection
+	cache_file=$(get_dirbrowse_cache_file "$name")
+	socket=$(get_dirbrowse_socket "$name")
 
-    # Build fzf options
-    local fzf_opts
-    build_fzf_opts fzf_opts "Enter: edit | Ctrl-O: window | Esc: back" " $name "
-    fzf_opts+=(--ansi)  # dirbrowse has colored output
+	# Build fzf options
+	local fzf_opts
+	build_fzf_opts fzf_opts "Enter: edit | Ctrl-O: window | Esc: back" " $name "
+	fzf_opts+=(--ansi) # dirbrowse has colored output
 
-    # Check if we have a valid cache
-    if is_cache_valid "$cache_file" "$cache_ttl"; then
-        # Cache is valid - load instantly and refresh in background
-        refresh_dirbrowse_cache "$name" "$socket" &
-        local refresh_pid=$!
+	# Check if we have a valid cache
+	if is_cache_valid "$cache_file" "$cache_ttl"; then
+		# Cache is valid - load instantly and refresh in background
+		refresh_dirbrowse_cache "$name" "$socket" &
+		local refresh_pid=$!
 
-        # Run fzf with cached content and --listen for hot-swap
-        selection=$(cat "$cache_file" | fzf "${fzf_opts[@]}" --listen "$socket") || true
+		# Run fzf with cached content and --listen for hot-swap
+		selection=$(cat "$cache_file" | fzf "${fzf_opts[@]}" --listen "$socket") || true
 
-        # Clean up background job if still running
-        kill $refresh_pid 2>/dev/null || true
-        rm -f "$socket" 2>/dev/null || true
-    else
-        # No valid cache - stream to fzf AND save to cache via tee
-        selection=$(build_dirbrowse_menu "$name" | tee "$cache_file" | fzf "${fzf_opts[@]}") || true
-    fi
+		# Clean up background job if still running
+		kill $refresh_pid 2>/dev/null || true
+		rm -f "$socket" 2>/dev/null || true
+	else
+		# No valid cache - stream to fzf AND save to cache via tee
+		selection=$(build_dirbrowse_menu "$name" | tee "$cache_file" | fzf "${fzf_opts[@]}") || true
+	fi
 
-    if [[ -z "$selection" ]]; then
-        # Go back to main menu
-        launch
-        return
-    fi
+	if [[ -z "$selection" ]]; then
+		# Go back to main menu
+		launch
+		return
+	fi
 
-    # Parse: first line is key pressed (if --expect matched), rest is selection
-    local key selected_line
-    key=$(echo "$selection" | head -1)
-    selected_line=$(echo "$selection" | tail -1)
+	# Parse: first line is key pressed (if --expect matched), rest is selection
+	local key selected_line
+	key=$(echo "$selection" | head -1)
+	selected_line=$(echo "$selection" | tail -1)
 
-    if [[ -z "$selected_line" ]]; then
-        launch
-        return
-    fi
+	if [[ -z "$selected_line" ]]; then
+		launch
+		return
+	fi
 
-    # Extract file path
-    local file_path
-    file_path=$(echo "$selected_line" | cut -f2)
+	# Extract file path
+	local file_path
+	file_path=$(echo "$selected_line" | cut -f2)
 
-    if [[ -n "$file_path" && -f "$file_path" ]]; then
-        local editor="${VISUAL:-${EDITOR:-nvim}}"
-        local file_basename
-        file_basename=$(basename "$file_path")
+	if [[ -n "$file_path" && -f "$file_path" ]]; then
+		local editor="${VISUAL:-${EDITOR:-nvim}}"
+		local file_basename
+		file_basename=$(basename "$file_path")
 
-        if [[ "$key" == "ctrl-o" ]]; then
-            # Open in new tmux window
-            local dir
-            dir=$(dirname "$file_path")
-            tmux new-window -n "$file_basename" -c "$dir" "$editor \"$file_path\""
-        else
-            # Open in editor popup
-            tmux run-shell -b "sleep 0.05; tmux display-popup -E -b rounded -T ' $name: $file_basename ' -w $width -h $height '$editor \"$file_path\"'"
-            exit 0
-        fi
-    fi
+		if [[ "$key" == "ctrl-o" ]]; then
+			# Open in new tmux window
+			local dir
+			dir=$(dirname "$file_path")
+			tmux new-window -n "$file_basename" -c "$dir" "$editor \"$file_path\""
+		else
+			# Open in editor popup
+			tmux run-shell -b "sleep 0.05; tmux display-popup -E -b rounded -T ' $name: $file_basename ' -w $width -h $height '$editor \"$file_path\"'"
+			exit 0
+		fi
+	fi
 }
 
 # Main launcher using fzf
 launch() {
-    # Check dependencies
-    if ! command -v fzf &>/dev/null; then
-        echo "Error: fzf is required. Install it first." >&2
-        exit 1
-    fi
+	# Check dependencies
+	if ! command -v fzf &>/dev/null; then
+		echo "Error: fzf is required. Install it first." >&2
+		exit 1
+	fi
 
-    if ! command -v tmux &>/dev/null; then
-        echo "Error: tmux is required." >&2
-        exit 1
-    fi
+	if ! command -v tmux &>/dev/null; then
+		echo "Error: tmux is required." >&2
+		exit 1
+	fi
 
-    if ! command -v curl &>/dev/null; then
-        echo "Error: curl is required for menu hot-swap." >&2
-        exit 1
-    fi
+	if ! command -v curl &>/dev/null; then
+		echo "Error: curl is required for menu hot-swap." >&2
+		exit 1
+	fi
 
-    if [[ -z "${TMUX:-}" ]]; then
-        echo "Error: Must be run inside tmux." >&2
-        exit 1
-    fi
+	if [[ -z "${TMUX:-}" ]]; then
+		echo "Error: Must be run inside tmux." >&2
+		exit 1
+	fi
 
-    # No config? Offer to create one, or show message if config exists but is empty
-    if ! has_config; then
-        if [[ -f "$NUNCHUX_RC_FILE" || -f "$NUNCHUX_RC_FALLBACK" ]]; then
-            # Config exists but has no apps
-            echo "Config file exists but has no apps configured."
-            echo "Edit $NUNCHUX_RC_FILE to add your apps."
-            exit 0
-        else
-            show_no_config_popup
-        fi
-    fi
+	# No config? Offer to create one, or show message if config exists but is empty
+	if ! has_config; then
+		if [[ -f "$NUNCHUX_RC_FILE" || -f "$NUNCHUX_RC_FALLBACK" ]]; then
+			# Config exists but has no apps
+			echo "Config file exists but has no apps configured."
+			echo "Edit $NUNCHUX_RC_FILE to add your apps."
+			exit 0
+		else
+			show_no_config_popup
+		fi
+	fi
 
-    local selection
-    local script_path
-    script_path=$(realpath "$0")
+	local selection
+	local script_path
+	script_path=$(realpath "$0")
 
-    # Build reload command with submenu context
-    local reload_cmd="$script_path --menu"
-    local header="Enter: popup | Ctrl-O: window | Ctrl-X: kill"
-    if [[ -n "$CURRENT_SUBMENU" ]]; then
-        reload_cmd="$script_path --menu --submenu $CURRENT_SUBMENU"
-        header="Enter: popup | Ctrl-O: window | Ctrl-X: kill | Esc: back"
-    fi
+	# Build reload command with submenu context
+	local reload_cmd="$script_path --menu"
+	local header="Enter: popup | Ctrl-O: window | Ctrl-X: kill"
+	if [[ -n "$CURRENT_SUBMENU" ]]; then
+		reload_cmd="$script_path --menu --submenu $CURRENT_SUBMENU"
+		header="Enter: popup | Ctrl-O: window | Ctrl-X: kill | Esc: back"
+	fi
 
-    # Cache settings
-    local cache_file socket cache_ttl
-    cache_ttl="$MENU_CACHE_TTL"
-    cache_file=$(get_main_menu_cache_file)
-    socket=$(get_main_menu_socket)
+	# Cache settings
+	local cache_file socket cache_ttl
+	cache_ttl="$MENU_CACHE_TTL"
+	cache_file=$(get_main_menu_cache_file)
+	socket=$(get_main_menu_socket)
 
-    # Build fzf options
-    local fzf_opts
-    build_fzf_opts fzf_opts "$header" "$FZF_BORDER_LABEL"
-    fzf_opts+=(--bind="ctrl-x:reload($script_path --kill {2} >/dev/null 2>&1; $reload_cmd)")
+	# Build fzf options
+	local fzf_opts
+	build_fzf_opts fzf_opts "$header" "$FZF_BORDER_LABEL"
+	fzf_opts+=(--bind="ctrl-x:reload($script_path --kill {2} >/dev/null 2>&1; $reload_cmd)")
 
-    # Use caching for main menu (not submenus - they're fast)
-    if [[ -z "$CURRENT_SUBMENU" ]] && is_cache_valid "$cache_file" "$cache_ttl"; then
-        # Cache is valid - load instantly and refresh in background
-        refresh_main_menu_cache "$socket" &
-        local refresh_pid=$!
+	# Use caching for main menu (not submenus - they're fast)
+	if [[ -z "$CURRENT_SUBMENU" ]] && is_cache_valid "$cache_file" "$cache_ttl"; then
+		# Cache is valid - load instantly and refresh in background
+		refresh_main_menu_cache "$socket" &
+		local refresh_pid=$!
 
-        selection=$(cat "$cache_file" | fzf "${fzf_opts[@]}" --listen "$socket") || true
+		selection=$(cat "$cache_file" | fzf "${fzf_opts[@]}" --listen "$socket") || true
 
-        # Clean up background job
-        kill $refresh_pid 2>/dev/null || true
-        rm -f "$socket" 2>/dev/null || true
-    else
-        # No valid cache or in submenu - build fresh with streaming
-        if [[ -z "$CURRENT_SUBMENU" ]]; then
-            # Stream to fzf AND save to cache via tee
-            selection=$(build_menu | tee "$cache_file" | fzf "${fzf_opts[@]}") || true
-        else
-            # Submenu - use submenu cache with per-submenu TTL
-            local submenu_cache submenu_socket submenu_ttl
-            submenu_cache=$(get_submenu_cache_file "$CURRENT_SUBMENU")
-            submenu_socket=$(get_submenu_socket "$CURRENT_SUBMENU")
-            submenu_ttl="${SUBMENU_CACHE_TTL[$CURRENT_SUBMENU]:-$MENU_CACHE_TTL}"
+		# Clean up background job
+		kill $refresh_pid 2>/dev/null || true
+		rm -f "$socket" 2>/dev/null || true
+	else
+		# No valid cache or in submenu - build fresh with streaming
+		if [[ -z "$CURRENT_SUBMENU" ]]; then
+			# Stream to fzf AND save to cache via tee
+			selection=$(build_menu | tee "$cache_file" | fzf "${fzf_opts[@]}") || true
+		else
+			# Submenu - use submenu cache with per-submenu TTL
+			local submenu_cache submenu_socket submenu_ttl
+			submenu_cache=$(get_submenu_cache_file "$CURRENT_SUBMENU")
+			submenu_socket=$(get_submenu_socket "$CURRENT_SUBMENU")
+			submenu_ttl="${SUBMENU_CACHE_TTL[$CURRENT_SUBMENU]:-$MENU_CACHE_TTL}"
 
-            if is_cache_valid "$submenu_cache" "$submenu_ttl"; then
-                # Cache valid - load instantly and refresh in background
-                refresh_submenu_cache "$CURRENT_SUBMENU" "$submenu_socket" &
-                local submenu_refresh_pid=$!
+			if is_cache_valid "$submenu_cache" "$submenu_ttl"; then
+				# Cache valid - load instantly and refresh in background
+				refresh_submenu_cache "$CURRENT_SUBMENU" "$submenu_socket" &
+				local submenu_refresh_pid=$!
 
-                selection=$(cat "$submenu_cache" | fzf "${fzf_opts[@]}" --listen "$submenu_socket") || true
+				selection=$(cat "$submenu_cache" | fzf "${fzf_opts[@]}" --listen "$submenu_socket") || true
 
-                kill $submenu_refresh_pid 2>/dev/null || true
-                rm -f "$submenu_socket" 2>/dev/null || true
-            else
-                # No valid cache - stream to fzf AND save to cache via tee
-                selection=$(build_menu | tee "$submenu_cache" | fzf "${fzf_opts[@]}") || true
-            fi
-        fi
-    fi
+				kill $submenu_refresh_pid 2>/dev/null || true
+				rm -f "$submenu_socket" 2>/dev/null || true
+			else
+				# No valid cache - stream to fzf AND save to cache via tee
+				selection=$(build_menu | tee "$submenu_cache" | fzf "${fzf_opts[@]}") || true
+			fi
+		fi
+	fi
 
-    if [[ -z "$selection" ]]; then
-        return 0
-    fi
+	if [[ -z "$selection" ]]; then
+		return 0
+	fi
 
-    # Parse: first line is key pressed (if --expect matched), rest is selection
-    local key selected_line
-    key=$(echo "$selection" | head -1)
-    selected_line=$(echo "$selection" | tail -1)
+	# Parse: first line is key pressed (if --expect matched), rest is selection
+	local key selected_line
+	key=$(echo "$selection" | head -1)
+	selected_line=$(echo "$selection" | tail -1)
 
-    if [[ -z "$selected_line" ]]; then
-        return 0
-    fi
+	if [[ -z "$selected_line" ]]; then
+		return 0
+	fi
 
-    # Extract fields (tab-separated: visible \t name \t cmd \t width \t height \t on_exit)
-    local name cmd width height on_exit
-    name=$(echo "$selected_line" | cut -f2)
-    cmd=$(echo "$selected_line" | cut -f3)
-    width=$(echo "$selected_line" | cut -f4)
-    height=$(echo "$selected_line" | cut -f5)
-    on_exit=$(echo "$selected_line" | cut -f6)
+	# Extract fields (tab-separated: visible \t name \t cmd \t width \t height \t on_exit)
+	local name cmd width height on_exit
+	name=$(echo "$selected_line" | cut -f2)
+	cmd=$(echo "$selected_line" | cut -f3)
+	width=$(echo "$selected_line" | cut -f4)
+	height=$(echo "$selected_line" | cut -f5)
+	on_exit=$(echo "$selected_line" | cut -f6)
 
-    if [[ -z "$name" ]]; then
-        return 0
-    fi
+	if [[ -z "$name" ]]; then
+		return 0
+	fi
 
-    # Handle based on key pressed
-    if [[ "$key" == "ctrl-o" ]]; then
-        # Easter egg: ctrl-o on submenu or dirbrowse
-        if [[ "$name" == submenu:* || "$name" == dirbrowse:* ]]; then
-            show_chuck_easter_egg
-        elif is_app_running "$name"; then
-            switch_to_app "$name"
-        else
-            open_app "$name" "$cmd"
-        fi
-    elif [[ "$name" == submenu:* ]]; then
-        # Open submenu - set filter and relaunch
-        local submenu_name="${name#submenu:}"
-        CURRENT_SUBMENU="$submenu_name"
-        FZF_BORDER_LABEL=" $submenu_name "
-        launch
-        return
-    elif [[ "$name" == dirbrowse:* ]]; then
-        # Open directory browser
-        local dirbrowse_name="${name#dirbrowse:}"
-        launch_dirbrowse "$dirbrowse_name"
-        return
-    elif [[ "$name" == just:* || "$name" == npm:* ]]; then
-        # Just recipes and npm scripts run in current pane
-        tmux send-keys "$cmd" Enter
-    elif is_app_running "$name"; then
-        # App is running, switch to it
-        switch_to_app "$name"
-    else
-        open_popup "$name" "$cmd" "$width" "$height" "$on_exit"
-    fi
+	# Handle based on key pressed
+	if [[ "$key" == "ctrl-o" ]]; then
+		# Easter egg: ctrl-o on submenu or dirbrowse
+		if [[ "$name" == submenu:* || "$name" == dirbrowse:* ]]; then
+			show_chuck_easter_egg
+		elif is_app_running "$name"; then
+			switch_to_app "$name"
+		else
+			open_app "$name" "$cmd"
+		fi
+	elif [[ "$name" == submenu:* ]]; then
+		# Open submenu - set filter and relaunch
+		local submenu_name="${name#submenu:}"
+		CURRENT_SUBMENU="$submenu_name"
+		FZF_BORDER_LABEL=" $submenu_name "
+		launch
+		return
+	elif [[ "$name" == dirbrowse:* ]]; then
+		# Open directory browser
+		local dirbrowse_name="${name#dirbrowse:}"
+		launch_dirbrowse "$dirbrowse_name"
+		return
+	elif [[ "$name" == just:* || "$name" == npm:* ]]; then
+		# Just recipes and npm scripts run in current pane
+		tmux send-keys "$cmd" Enter
+	elif is_app_running "$name"; then
+		# App is running, switch to it
+		switch_to_app "$name"
+	else
+		open_popup "$name" "$cmd" "$width" "$height" "$on_exit"
+	fi
 }
 
 # Show help
 usage() {
-    cat <<EOF
+	cat <<EOF
 nunchux - Smart tmux app launcher
 
 Usage: nunchux [options]
@@ -1309,73 +1401,76 @@ EOF
 
 # List apps
 list_apps() {
-    echo "Configured apps:"
-    echo ""
-    while IFS= read -r app; do
-        local name cmd desc
-        name=$(get_app_name "$app")
-        cmd=$(get_app_command "$app")
-        desc=$(get_app_description "$app")
+	echo "Configured apps:"
+	echo ""
+	while IFS= read -r app; do
+		local name cmd desc
+		name=$(get_app_name "$app")
+		cmd=$(get_app_command "$app")
+		desc=$(get_app_description "$app")
 
-        if is_app_running "$name"; then
-            printf "  %s %-12s %s\n" "$ICON_RUNNING" "$name" "$desc"
-        else
-            printf "  %s %-12s %s\n" "$ICON_STOPPED" "$name" "$desc"
-        fi
-    done < <(load_apps)
+		if is_app_running "$name"; then
+			printf "  %s %-12s %s\n" "$ICON_RUNNING" "$name" "$desc"
+		else
+			printf "  %s %-12s %s\n" "$ICON_STOPPED" "$name" "$desc"
+		fi
+	done < <(load_apps)
 }
 
 # Main
 main() {
-    case "${1:-}" in
-        --kill)
-            shift
-            kill_app "$1"
-            ;;
-        --menu)
-            # Support --menu with optional submenu filter
-            if [[ "${2:-}" == "--submenu" ]]; then
-                CURRENT_SUBMENU="$3"
-            fi
-            build_menu
-            ;;
-        --list)
-            list_apps
-            ;;
-        --config)
-            shift
-            case "${1:-}" in
-                menu_width) echo "$MENU_WIDTH" ;;
-                menu_height) echo "$MENU_HEIGHT" ;;
-                popup_width) echo "$APP_POPUP_WIDTH" ;;
-                popup_height) echo "$APP_POPUP_HEIGHT" ;;
-                *) echo "Unknown config: $1" >&2; exit 1 ;;
-            esac
-            ;;
-        --submenu)
-            shift
-            CURRENT_SUBMENU="$1"
-            FZF_BORDER_LABEL=" $CURRENT_SUBMENU "
-            if ! launch 2>&1; then
-                echo "Press any key to close..."
-                read -n 1
-            fi
-            ;;
-        --help|-h|help)
-            usage
-            ;;
-        "")
-            if ! launch 2>&1; then
-                echo "Press any key to close..."
-                read -n 1
-            fi
-            ;;
-        *)
-            echo "Unknown option: $1" >&2
-            usage >&2
-            exit 1
-            ;;
-    esac
+	case "${1:-}" in
+	--kill)
+		shift
+		kill_app "$1"
+		;;
+	--menu)
+		# Support --menu with optional submenu filter
+		if [[ "${2:-}" == "--submenu" ]]; then
+			CURRENT_SUBMENU="$3"
+		fi
+		build_menu
+		;;
+	--list)
+		list_apps
+		;;
+	--config)
+		shift
+		case "${1:-}" in
+		menu_width) echo "$MENU_WIDTH" ;;
+		menu_height) echo "$MENU_HEIGHT" ;;
+		popup_width) echo "$APP_POPUP_WIDTH" ;;
+		popup_height) echo "$APP_POPUP_HEIGHT" ;;
+		*)
+			echo "Unknown config: $1" >&2
+			exit 1
+			;;
+		esac
+		;;
+	--submenu)
+		shift
+		CURRENT_SUBMENU="$1"
+		FZF_BORDER_LABEL=" $CURRENT_SUBMENU "
+		if ! launch 2>&1; then
+			echo "Press any key to close..."
+			read -n 1
+		fi
+		;;
+	--help | -h | help)
+		usage
+		;;
+	"")
+		if ! launch 2>&1; then
+			echo "Press any key to close..."
+			read -n 1
+		fi
+		;;
+	*)
+		echo "Unknown option: $1" >&2
+		usage >&2
+		exit 1
+		;;
+	esac
 }
 
 main "$@"
